@@ -6,16 +6,21 @@ import androidx.appcompat.app.AppCompatActivity;
 import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.ContentResolver;
+import android.content.ContentValues;
+import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Environment;
 import android.provider.MediaStore;
 import android.provider.Settings;
 import android.view.View;
 import android.widget.Button;
 import android.widget.ImageView;
+import android.widget.Toast;
 
 import com.karumi.dexter.Dexter;
 import com.karumi.dexter.MultiplePermissionsReport;
@@ -23,10 +28,15 @@ import com.karumi.dexter.PermissionToken;
 import com.karumi.dexter.listener.PermissionRequest;
 import com.karumi.dexter.listener.multi.MultiplePermissionsListener;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.sql.Timestamp;
+import java.time.LocalTime;
 import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
@@ -68,6 +78,47 @@ public class MainActivity extends AppCompatActivity {
     }
     private void loadProfile(String uri) {
         img.setImageURI(Uri.parse(uri));
+        ContentResolver contentResolver = this.getContentResolver();
+        InputStream inputStream = null;
+        OutputStream outputStream = null;
+        Timestamp timestamp = new Timestamp(System.currentTimeMillis());
+        try {
+            inputStream = contentResolver.openInputStream(Uri.parse(uri));
+
+            File downloadsDirectory = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+            File imageFile = new File(downloadsDirectory, "img"+timestamp.getTime()+".jpg");
+            outputStream = new FileOutputStream(imageFile);
+
+            byte[] buffer = new byte[4 * 1024]; // 4KB buffer size
+            int bytesRead;
+            while ((bytesRead = inputStream.read(buffer)) != -1) {
+                outputStream.write(buffer, 0, bytesRead);
+            }
+
+            // Add the image to the media store (optional)
+            addImageToMediaStore(this, imageFile);
+        } catch (IOException e) {
+            e.printStackTrace();
+        } finally {
+            try {
+                if (inputStream != null) {
+                    inputStream.close();
+                }
+                if (outputStream != null) {
+                    outputStream.close();
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    private static void addImageToMediaStore(Context context, File imageFile) {
+        ContentValues values = new ContentValues();
+        values.put(MediaStore.Images.Media.DATA, imageFile.getAbsolutePath());
+        values.put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg");
+
+        context.getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
     }
     private void showImagePickerOptions() {
         ImagePickerActivity.showImagePickerOptions(this, new ImagePickerActivity.PickerOptionListener() {
@@ -129,12 +180,6 @@ public class MainActivity extends AppCompatActivity {
             }
         }
     }
-
-    /**
-     * Showing Alert Dialog with Settings option
-     * Navigates user to app settings
-     * NOTE: Keep proper title and message depending on your app
-     */
     private void showSettingsDialog() {
         AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
         builder.setTitle("Grant Permissions");
